@@ -58,6 +58,11 @@ Requires Python 3.9+ and httpx (`pip install httpx`).
 - "What's available in Herzliya this Thursday evening for 2?"
 - "Check if Taizu has anything available this month on a weekday"
 
+Or use the CLI directly:
+```bash
+python3 scripts/ontopo-cli.py available friday 19:00 --city tel-aviv
+```
+
 ## Automation examples
 
 Ask your AI agent to set up recurring checks:
