@@ -1,21 +1,10 @@
 ---
 name: ontopo
-description: Search Israeli restaurants, check table availability, view menus, and get booking links on Ontopo. מסעדות בישראל, הזמנת שולחן, תפריטים, זמינות. Use for "restaurant reservation", "table booking", "ontopo", "where to eat in Israel", "מסעדה", "הזמנה", "שולחן", "אונטופו", "תפריט", "זמינות", "ארוחת ערב", "איפה לאכול".
-license: MIT
-compatibility: Requires Python 3.9+ with httpx, and internet access
-metadata:
-  author: Alex Polonsky
-  github: https://github.com/alexpolonsky
-  version: "1.0.0"
-  keywords: restaurant, reservation, israel, ontopo, dining, מסעדה, הזמנה
-  openclaw:
-    emoji: "🍽️"
-    os:
-      - darwin
-      - linux
-    requires:
-      bins:
-        - python3
+version: 1.0.0
+description: Search Israeli restaurants, check table availability, view menus, and get booking links on Ontopo. Use for "restaurant reservation", "table booking", "ontopo", "where to eat in Israel", "מסעדה", "הזמנת שולחן", "תפריט", "ארוחת ערב", "אונטופו", "איפה לאכול".
+author: Alex Polonsky (https://github.com/alexpolonsky)
+homepage: https://github.com/alexpolonsky/agent-skill-ontopo
+metadata: {"openclaw": {"emoji": "🍽️", "os": ["darwin", "linux"], "requires": {"bins": ["python3"]}, "install": [{"kind": "uv", "package": "httpx", "label": "Install httpx via pip/uv"}]}}
 ---
 
 # Ontopo Restaurant Search
