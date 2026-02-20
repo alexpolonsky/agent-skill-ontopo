@@ -49,15 +49,22 @@ Requires Python 3.9+ and httpx (`pip install httpx`).
 
 </details>
 
-## Try it
+## What you can ask
 
-Ask your AI assistant:
-> "Find me a table for 2 at Taizu this Friday or Saturday evening"
+> "What restaurants are available for 4 people in Tel Aviv this Saturday at 8pm?"
 
-Or use the CLI directly:
-```bash
-python3 scripts/ontopo-cli.py available friday 19:00 --city tel-aviv
-```
+- "Is Mashya available any night this weekend for 2?"
+- "Which Tel Aviv restaurants have tables for 6 available this Friday or Saturday?"
+- "What's available in Herzliya this Thursday evening for 2?"
+- "Check if Taizu has anything available this month on a weekday"
+
+## Automation examples
+
+Ask your AI agent to set up recurring checks:
+
+- "Every Sunday morning, check if there are any available tables for 2 in Tel Aviv on the coming Friday or Saturday and let me know what you find"
+- "Check every day and alert me if a table opens up at Mashya this month for 2 people"
+- "Before each weekend, check availability at a few good restaurants in Tel Aviv for Friday or Saturday evening and send me a summary"
 
 ## Commands
 
