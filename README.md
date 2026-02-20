@@ -2,8 +2,9 @@
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![Agent Skills](https://img.shields.io/badge/Agent%20Skills-compatible-purple)
+[![ClawHub](https://img.shields.io/badge/ClawHub-ontopo-blue)](https://clawhub.ai/skills/ontopo)
 
-> **[Agent Skills](https://agentskills.io) format** - works with OpenClaw, Claude, Cursor, Codex, and other compatible clients
+> **[Agent Skills](https://agentskills.io) format** - works with OpenClaw, Claude, Cursor, Codex, and other compatible clients | **[ClawHub](https://clawhub.ai/skills/ontopo)**
 
 Search Israeli restaurants, check table availability across date ranges, view menus, and get direct booking links via Ontopo.
 
@@ -16,6 +17,10 @@ This tool searches across date ranges, multiple restaurants, and patterns like "
 ## Installation
 
 ```bash
+# ClawHub
+clawdhub install ontopo
+
+# npx
 npx skills add alexpolonsky/agent-skill-ontopo
 ```
 
