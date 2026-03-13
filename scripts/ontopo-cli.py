@@ -69,7 +69,7 @@ _CITY_DATA = {
     "hasharon":       ("75635900", "hasharon",            "אזור השרון"),
 }
 
-# User-friendly aliases (hyphenated -> canonical slug)
+# User-friendly aliases (hyphenated → canonical slug)
 _CITY_ALIASES = {
     "herzliya": "herzeliya",
     "ramat-gan": "ramatgan",
@@ -404,11 +404,14 @@ class OntopoClient:
         size: int,
         geocodes: Optional[List[str]] = None,
         category: Optional[str] = None,
+        venue_type: Optional[str] = None,
         city: Optional[str] = None
     ) -> str:
         """Create a search session for batch availability.
 
         Args:
+            venue_type: Filter by venue tag (e.g. 'safe_zone' for mamad/protected space,
+                        'kosher', 'vegetarian', 'wine_bar', etc.)
             city: City slug for marketplace routing (each city has its own marketplace).
         """
         marketplace_id = CITY_MARKETPLACE_IDS.get(city, ISRAEL_MARKETPLACE_ID) if city else ISRAEL_MARKETPLACE_ID
@@ -430,6 +433,8 @@ class OntopoClient:
             body["geocodes"] = geocodes
         if category:
             body["primary"] = [category]
+        if venue_type:
+            body["venue_type"] = venue_type
 
         response = await self._request("POST", "/search_token", body=body)
         return response.get("search_id", response.get("token", ""))
@@ -566,7 +571,8 @@ class CommandHandler:
         date: str,
         time: str,
         city: Optional[str] = None,
-        party_size: int = 2
+        party_size: int = 2,
+        venue_type: Optional[str] = None
     ) -> None:
         """Search for available venues."""
         api_date = parse_date(date)
@@ -583,7 +589,7 @@ class CommandHandler:
         try:
             search_id = await self.client.create_search_token(
                 api_date, api_time, party_size, geocodes,
-                city=city
+                venue_type=venue_type, city=city
             )
 
             if not search_id:
@@ -594,6 +600,8 @@ class CommandHandler:
             results = response.get("posts", response.get("results", []))
             if not isinstance(results, list):
                 results = []
+            # Total venues matching the filter (including unavailable)
+            total_venues = response.get("total")
         except Exception as e:
             if self.json_output:
                 self._output({"error": str(e), "venues": []}, "")
@@ -601,13 +609,27 @@ class CommandHandler:
                 print(f"Error searching availability: {e}")
             return
 
+        # Count venues with actual bookable time slots (not just "Check venue")
+        def _has_bookable_slots(venue):
+            avail = venue.get("availability", {})
+            for area in avail.get("areas", []):
+                for opt in area.get("options", []):
+                    if isinstance(opt, dict) and opt.get("method") == "seat" and opt.get("time"):
+                        return True
+            return False
+
+        bookable_count = sum(1 for r in results if _has_bookable_slots(r))
+
         data = {
             "date": api_date,
             "time": api_time,
             "party_size": party_size,
             "city": city,
+            "venue_type": venue_type,
             "venues": results,
-            "count": len(results)
+            "count": len(results),
+            "bookable_count": bookable_count,
+            "total_venues": total_venues
         }
 
         if self.json_output:
@@ -619,6 +641,11 @@ class CommandHandler:
             print(f"Party Size: {party_size}")
             if city:
                 print(f"City: {city}")
+            if venue_type:
+                label = "מרחב מוגן (Protected Space)" if venue_type == "safe_zone" else venue_type
+                print(f"Filter: {label}")
+                if total_venues:
+                    print(f"Total venues with filter: {total_venues} ({bookable_count} with bookable slots)")
             print()
 
             if not results:
@@ -1098,6 +1125,8 @@ Examples:
     avail_parser.add_argument("time", help="Time (HH:MM, HHMM, 7pm)")
     avail_parser.add_argument("--city", help="City to search in")
     avail_parser.add_argument("--party-size", type=int, default=2, help="Party size (default: 2)")
+    avail_parser.add_argument("--safe-zone", "--mamad", action="store_true", help="Only show venues with safe zone / mamad (protected space)")
+    avail_parser.add_argument("--venue-type", help="Filter by venue tag (e.g. kosher, vegetarian, wine_bar)")
     avail_parser.add_argument("--json", action="store_true", help="Output as JSON")
 
     # check
@@ -1160,8 +1189,10 @@ async def main_async(args: argparse.Namespace) -> int:
                 await handler.cmd_search(args.query, args.city)
 
             elif args.command == "available":
+                venue_type = "safe_zone" if getattr(args, "safe_zone", False) else getattr(args, "venue_type", None)
                 await handler.cmd_available(
-                    args.date, args.time, args.city, args.party_size
+                    args.date, args.time, args.city, args.party_size,
+                    venue_type=venue_type
                 )
 
             elif args.command == "check":

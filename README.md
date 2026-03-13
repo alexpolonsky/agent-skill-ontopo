@@ -99,6 +99,7 @@ Ask your AI agent to set up recurring checks:
 | `--locale en\|he` | search, info, url | Language (English or Hebrew) |
 | `--city` | available, search | City filter |
 | `--party-size` | available, check, range | Number of guests (default: 2) |
+| `--safe-zone` | available | Venues with protected space (ממ"ד). Alias: `--mamad` |
 
 </details>
 
@@ -113,7 +114,7 @@ Ask your AI agent to set up recurring checks:
 <details>
 <summary>Supported cities (27)</summary>
 
-27 cities including tel-aviv, jerusalem, haifa, herzliya, raanana, ramat-gan, netanya, ashdod, beer-sheva, eilat, modiin, rehovot, rishon-lezion, petah-tikva, holon, kfar-saba, hod-hasharon, caesarea, and more. Hyphenated aliases accepted. Run `cities` for the full list.
+tel-aviv, jerusalem, haifa, herzliya, raanana, ramat-gan, netanya, ashdod, beer-sheva, eilat, modiin, rehovot, rishon-lezion, petah-tikva, holon, kfar-saba, hod-hasharon, caesarea, and more. Hyphenated aliases accepted. Run `cities` for the full list.
 
 </details>
 
