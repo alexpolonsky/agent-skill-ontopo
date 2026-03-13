@@ -101,7 +101,7 @@ python3 {baseDir}/scripts/ontopo-cli.py url 66915792 --locale he
 | `--locale` | search, info, url | Language: en or he |
 | `--city` | available, search | City filter (tel-aviv, jerusalem, etc.) |
 | `--party-size` | available, check, range | Number of guests (default: 2) |
-| `--safe-zone` | available | Filter to venues with protected space (ממ"ד). Alias: `--mamad` |
+| `--safe-zone` | available | Filter to venues tagged as safe zone (מרחב מוגן) on Ontopo. Alias: `--mamad` |
 | `--times` | range | Comma-separated times (default: 19:00,20:00) |
 | `--section` | menu | Filter by menu section |
 | `--search` | menu | Search menu items by name |

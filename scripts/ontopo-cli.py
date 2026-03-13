@@ -410,7 +410,7 @@ class OntopoClient:
         """Create a search session for batch availability.
 
         Args:
-            venue_type: Filter by venue tag (e.g. 'safe_zone' for mamad/protected space,
+            venue_type: Filter by venue tag (e.g. 'safe_zone' for מרחב מוגן,
                         'kosher', 'vegetarian', 'wine_bar', etc.)
             city: City slug for marketplace routing (each city has its own marketplace).
         """
@@ -642,7 +642,7 @@ class CommandHandler:
             if city:
                 print(f"City: {city}")
             if venue_type:
-                label = "מרחב מוגן (Protected Space)" if venue_type == "safe_zone" else venue_type
+                label = "מרחב מוגן (Safe Zone)" if venue_type == "safe_zone" else venue_type
                 print(f"Filter: {label}")
                 if total_venues:
                     print(f"Total venues with filter: {total_venues} ({bookable_count} with bookable slots)")
@@ -1125,7 +1125,7 @@ Examples:
     avail_parser.add_argument("time", help="Time (HH:MM, HHMM, 7pm)")
     avail_parser.add_argument("--city", help="City to search in")
     avail_parser.add_argument("--party-size", type=int, default=2, help="Party size (default: 2)")
-    avail_parser.add_argument("--safe-zone", "--mamad", action="store_true", help="Only show venues with safe zone / mamad (protected space)")
+    avail_parser.add_argument("--safe-zone", "--mamad", action="store_true", help="Only show venues tagged as safe zone (מרחב מוגן) on Ontopo")
     avail_parser.add_argument("--venue-type", help="Filter by venue tag (e.g. kosher, vegetarian, wine_bar)")
     avail_parser.add_argument("--json", action="store_true", help="Output as JSON")
 

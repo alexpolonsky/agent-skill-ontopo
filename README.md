@@ -99,7 +99,7 @@ Ask your AI agent to set up recurring checks:
 | `--locale en\|he` | search, info, url | Language (English or Hebrew) |
 | `--city` | available, search | City filter |
 | `--party-size` | available, check, range | Number of guests (default: 2) |
-| `--safe-zone` | available | Venues with protected space (ממ"ד). Alias: `--mamad` |
+| `--safe-zone` | available | Venues tagged as safe zone (מרחב מוגן) on Ontopo. Alias: `--mamad` |
 
 </details>
 
