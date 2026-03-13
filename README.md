@@ -111,9 +111,9 @@ Ask your AI agent to set up recurring checks:
 </details>
 
 <details>
-<summary>Supported cities</summary>
+<summary>Supported cities (27)</summary>
 
-tel-aviv, jerusalem, haifa, herzliya, raanana, ramat-gan, netanya, ashdod, ashkelon, beer-sheva, eilat, modiin, rehovot, rishon-lezion, petah-tikva, holon, kfar-saba, hod-hasharon, caesarea
+27 cities including tel-aviv, jerusalem, haifa, herzliya, raanana, ramat-gan, netanya, ashdod, beer-sheva, eilat, modiin, rehovot, rishon-lezion, petah-tikva, holon, kfar-saba, hod-hasharon, caesarea, and more. Hyphenated aliases accepted. Run `cities` for the full list.
 
 </details>
 

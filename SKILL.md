@@ -113,7 +113,7 @@ python3 {baseDir}/scripts/ontopo-cli.py url 66915792 --locale he
 
 ## Supported Cities
 
-tel-aviv, jerusalem, haifa, herzliya, raanana, ramat-gan, netanya, ashdod, ashkelon, beer-sheva, eilat, modiin, rehovot, rishon-lezion, petah-tikva, holon, kfar-saba, hod-hasharon, caesarea
+Run `cities` for the full list. Common cities: tel-aviv, jerusalem, haifa, herzliya, raanana, ramat-gan, netanya, ashdod, beer-sheva, eilat, modiin, rehovot, rishon-lezion, petah-tikva, holon, kfar-saba, hod-hasharon, caesarea. Hyphenated aliases are accepted (e.g. `ramat-gan` → `ramatgan`).
 
 ## Workflow Example
 

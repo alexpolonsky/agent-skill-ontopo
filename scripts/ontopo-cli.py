@@ -29,45 +29,71 @@ except ImportError:
 BASE_URL = "https://ontopo.com/api"
 WEBSITE_URL = "https://ontopo.com"
 ISRAEL_DISTRIBUTOR_SLUG = "15171493"  # Required for venue search
-ISRAEL_MARKETPLACE_ID = "29421469"   # Required for batch availability search
-
-CITIES = [
-    "tel-aviv", "jerusalem", "haifa", "herzliya", "raanana", "ramat-gan",
-    "netanya", "ashdod", "ashkelon", "beer-sheva", "eilat", "modiin",
-    "rehovot", "rishon-lezion", "petah-tikva", "holon", "bat-yam",
-    "givataim", "kfar-saba", "hod-hasharon", "rosh-haayin", "shoham",
-    "yavne", "caesarea", "zichron-yaakov", "pardes-hanna", "hadera", "nahariya"
-]
+ISRAEL_MARKETPLACE_ID = "29421469"   # Default (Tel Aviv) for batch availability search
 
 CATEGORIES = [
     "restaurants", "bars", "fine_dining", "happy_hour",
     "brunch", "business", "kosher", "events"
 ]
 
-# City to geocode mapping for availability search (from Ontopo API)
-CITY_GEOCODES = {
-    "tel-aviv": "telavivjaffa",
-    "jerusalem": "jerusalem",
-    "haifa": "haifa",
-    "herzliya": "herzliya",
-    "raanana": "raanana",
-    "ramat-gan": "ramatgan",
-    "netanya": "netanya",
-    "ashdod": "ashdod",
-    "ashkelon": "ashkelon",
-    "beer-sheva": "beersheva",
-    "eilat": "eilat",
-    "modiin": "modiin",
-    "rehovot": "rehovot",
-    "rishon-lezion": "rishonlezion",
-    "petah-tikva": "petahtikva",
-    "holon": "holon",
-    "kfar-saba": "kfarsaba",
-    "hod-hasharon": "hodhasharon",
-    "caesarea": "caesarea",
-    "north": "north",
-    "south": "south",
+# Authoritative city data from Ontopo SSR __INITIAL_STATE__
+# Each entry: (marketplace_id, geocode_key, display_label)
+# The slug (dict key) matches Ontopo's URL pattern: /he/il/{slug}/restaurants
+_CITY_DATA = {
+    "tel-aviv":       ("29421469", "telavivjaffa",       "תל אביב"),
+    "jerusalem":      ("29384685", "jerusalem",          "ירושלים"),
+    "haifa":          ("11243454", "haifa",               "חיפה"),
+    "herzeliya":      ("62204663", "herzeliya",           "הרצליה"),
+    "raanana":        ("71499188", "raanana",             "רעננה"),
+    "ramatgan":       ("87918421", "rag-giv-area",        "רמת גן - גבעתיים"),
+    "natanya":        ("19467447", "netanya_area",        "נתניה"),
+    "ashdod":         ("93786391", "ashdod",              "אשדוד"),
+    "beer-sheva":     ("83166822", "beer_sheva",          "באר שבע"),
+    "eilat":          ("71154151", "eilat_area",          "אילת"),
+    "modiin":         ("49473533", "modiin_area",         "מודיעין והסביבה"),
+    "rehovot":        ("58943955", "rehovot",             "רחובות"),
+    "rishon_lezion":  ("39514882", "rishon_lezion",       "ראשון לציון"),
+    "petah_tikva":    ("74902764", "petah_tikva_area",    "פתח תקווה"),
+    "holon":          ("60235869", "holon-batyam-area",   "חולון - בת ים"),
+    "kfar_saba":      ("45164735", "kfarsaba",            "כפר סבא"),
+    "hod_hasharon":   ("77097784", "hod_hasharon",        "הוד השרון"),
+    "ramat_hasharon":  ("64031461", "ramat_hasharon",     "רמת השרון"),
+    "caesarya":       ("86032396", "caesarea_area",        "קיסריה - חדרה והסביבה"),
+    "ness_ziona":     ("47865336", "ness_ziona",          "נס ציונה"),
+    "kiryat_ono":     ("29033809", "kiryat_ono_area",     "קריית אונו"),
+    "kineret":        ("92127549", "golan_kineret",       "כנרת ורמת הגולן"),
+    "the_north":      ("45577648", "the_north",           "אזור הצפון"),
+    "south":          ("65424368", "south",               "אזור הדרום"),
+    "merkaz":         ("41581793", "merkaz",              "אזור המרכז"),
+    "hashfela":       ("74908782", "hashfela",            "אזור השפלה"),
+    "hasharon":       ("75635900", "hasharon",            "אזור השרון"),
 }
+
+# User-friendly aliases (hyphenated -> canonical slug)
+_CITY_ALIASES = {
+    "herzliya": "herzeliya",
+    "ramat-gan": "ramatgan",
+    "netanya": "natanya",
+    "rishon-lezion": "rishon_lezion",
+    "petah-tikva": "petah_tikva",
+    "kfar-saba": "kfar_saba",
+    "hod-hasharon": "hod_hasharon",
+    "ramat-hasharon": "ramat_hasharon",
+    "caesarea": "caesarya",
+    "ness-ziona": "ness_ziona",
+    "kiryat-ono": "kiryat_ono",
+    "north": "the_north",
+    "bat-yam": "holon",  # Same marketplace
+}
+
+def _resolve_city(city: str) -> str:
+    """Resolve user input to canonical city slug."""
+    city = city.lower().strip()
+    return _CITY_ALIASES.get(city, city)
+
+CITIES = sorted(_CITY_DATA.keys())
+CITY_GEOCODES = {slug: data[1] for slug, data in _CITY_DATA.items()}
+CITY_MARKETPLACE_IDS = {slug: data[0] for slug, data in _CITY_DATA.items()}
 
 
 # =============================================================================
@@ -377,17 +403,24 @@ class OntopoClient:
         time: str,
         size: int,
         geocodes: Optional[List[str]] = None,
-        category: Optional[str] = None
+        category: Optional[str] = None,
+        city: Optional[str] = None
     ) -> str:
-        """Create a search session for batch availability."""
+        """Create a search session for batch availability.
+
+        Args:
+            city: City slug for marketplace routing (each city has its own marketplace).
+        """
+        marketplace_id = CITY_MARKETPLACE_IDS.get(city, ISRAEL_MARKETPLACE_ID) if city else ISRAEL_MARKETPLACE_ID
         body = {
-            "marketplace_id": ISRAEL_MARKETPLACE_ID,
+            "marketplace_id": marketplace_id,
             "criteria": {
                 "date": date,
                 "time": time,
                 "size": str(size)  # Must be string
             },
             "locale": self.locale,
+            "traits": ["reservation"],
             "analytics": {
                 "distributor_id": "il",
                 "platform": "web"
@@ -457,15 +490,22 @@ class CommandHandler:
 
     async def cmd_cities(self) -> None:
         """List supported cities."""
-        data = {"cities": CITIES, "count": len(CITIES)}
+        cities_with_labels = [
+            {"slug": slug, "label": _CITY_DATA[slug][2]}
+            for slug in CITIES
+        ]
+        aliases = {v: k for k, v in _CITY_ALIASES.items()}
+        data = {"cities": [c["slug"] for c in cities_with_labels], "count": len(CITIES)}
 
         if self.json_output:
             self._output(data, "")
         else:
             print(f"Supported Cities ({len(CITIES)}):")
             print("-" * 40)
-            for i, city in enumerate(CITIES, 1):
-                print(f"  {i:2}. {city}")
+            for i, c in enumerate(cities_with_labels, 1):
+                alias = aliases.get(c["slug"])
+                alias_str = f" (or: {alias})" if alias else ""
+                print(f"  {i:2}. {c['slug']:20s} {c['label']}{alias_str}")
 
     async def cmd_categories(self) -> None:
         """List supported categories."""
@@ -532,13 +572,18 @@ class CommandHandler:
         api_date = parse_date(date)
         api_time = parse_time(time)
 
+        # Resolve city alias to canonical slug
+        if city:
+            city = _resolve_city(city)
+
         # Get geocode for city (single value, wrapped in list for API)
         geocode = CITY_GEOCODES.get(city) if city else None
         geocodes = [geocode] if geocode else None
 
         try:
             search_id = await self.client.create_search_token(
-                api_date, api_time, party_size, geocodes
+                api_date, api_time, party_size, geocodes,
+                city=city
             )
 
             if not search_id:
