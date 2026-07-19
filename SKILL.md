@@ -1,7 +1,7 @@
 ---
 name: ontopo
 version: 1.0.0
-description: Search Israeli restaurants, check table availability, view menus, and get booking links on Ontopo. Use for "restaurant reservation", "table booking", "ontopo", "where to eat in Israel", "מסעדה", "הזמנת שולחן", "תפריט", "ארוחת ערב", "אונטופו", "איפה לאכול".
+description: Find restaurants and check table availability in Israel. Search across multiple dates and venues at once, view menus, and get a booking link to finish on Ontopo. Covers dining and restaurant discovery in Tel Aviv, Jerusalem, Haifa, Eilat and 23 more cities. Use for "restaurant reservation", "table booking", "book a restaurant", "dinner reservation", "where to eat in Israel", "מסעדה", "הזמנה", "הזמנת שולחן", "תפריט", "ארוחת ערב", "איפה לאכול", "אונטופו".
 author: Alex Polonsky (https://github.com/alexpolonsky)
 homepage: https://github.com/alexpolonsky/agent-skill-ontopo
 metadata: {"openclaw": {"emoji": "🍽️", "os": ["darwin", "linux"], "requires": {"bins": ["python3"]}, "install": [{"kind": "uv", "package": "httpx", "label": "Install httpx via pip/uv"}]}}
