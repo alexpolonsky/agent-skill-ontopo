@@ -95,6 +95,47 @@ CITIES = sorted(_CITY_DATA.keys())
 CITY_GEOCODES = {slug: data[1] for slug, data in _CITY_DATA.items()}
 CITY_MARKETPLACE_IDS = {slug: data[0] for slug, data in _CITY_DATA.items()}
 
+# Substrings matched against a venue's address to filter search results by city.
+# The venue_search endpoint has no city parameter, so `search --city` is applied
+# client-side. Region slugs below cover several municipalities and cannot be
+# matched from an address string; they are handled separately.
+_CITY_ADDRESS_TERMS = {
+    "tel-aviv":       ["tel aviv", "תל אביב", "jaffa", "יפו"],
+    "jerusalem":      ["jerusalem", "ירושלים"],
+    "haifa":          ["haifa", "חיפה"],
+    "herzeliya":      ["herzliya", "herzeliya", "הרצליה"],
+    "raanana":        ["raanana", "ra'anana", "רעננה"],
+    "ramatgan":       ["ramat gan", "givatayim", "רמת גן", "גבעתיים"],
+    "natanya":        ["netanya", "natanya", "נתניה"],
+    "ashdod":         ["ashdod", "אשדוד"],
+    "beer-sheva":     ["beer sheva", "be'er sheva", "beersheba", "באר שבע"],
+    "eilat":          ["eilat", "אילת"],
+    "modiin":         ["modiin", "modi'in", "מודיעין"],
+    "rehovot":        ["rehovot", "רחובות"],
+    "rishon_lezion":  ["rishon", "ראשון לציון"],
+    "petah_tikva":    ["petah tikva", "petach tikva", "פתח תקווה"],
+    "holon":          ["holon", "bat yam", "חולון", "בת ים"],
+    "kfar_saba":      ["kfar saba", "כפר סבא"],
+    "hod_hasharon":   ["hod hasharon", "הוד השרון"],
+    "ramat_hasharon": ["ramat hasharon", "רמת השרון"],
+    "caesarya":       ["caesarea", "hadera", "קיסריה", "חדרה"],
+    "ness_ziona":     ["ness ziona", "nes ziona", "נס ציונה"],
+    "kiryat_ono":     ["kiryat ono", "קריית אונו", "קרית אונו"],
+}
+
+# Multi-municipality regions: valid for `available` (they map to a marketplace)
+# but not filterable from an address string in `search`.
+REGION_SLUGS = {s for s in _CITY_DATA if s not in _CITY_ADDRESS_TERMS}
+
+
+def city_matches_address(city_slug: str, address: str) -> bool:
+    """True if an address appears to be in the given city slug."""
+    terms = _CITY_ADDRESS_TERMS.get(city_slug)
+    if not terms:
+        return True
+    addr = (address or "").lower()
+    return any(term in addr for term in terms)
+
 
 # =============================================================================
 # UTILITY FUNCTIONS
@@ -316,8 +357,12 @@ class OntopoClient:
 
         raise RuntimeError("Max retries exceeded")
 
-    async def search_venues(self, query: str, city: Optional[str] = None) -> List[Dict]:
-        """Search for venues by query."""
+    async def search_venues(self, query: str) -> List[Dict]:
+        """Search for venues by query.
+
+        The endpoint has no city parameter; callers filter by city client-side
+        via city_matches_address().
+        """
         params = {
             "slug": ISRAEL_DISTRIBUTOR_SLUG,
             "version": "1",
@@ -526,7 +571,27 @@ class CommandHandler:
 
     async def cmd_search(self, query: str, city: Optional[str] = None) -> None:
         """Search for venues."""
-        venues = await self.client.search_venues(query, city)
+        warning = None
+        if city:
+            city = _resolve_city(city)
+            if city not in _CITY_DATA:
+                msg = (f"Unknown city '{city}'. "
+                       f"Run: ontopo-cli.py cities")
+                if self.json_output:
+                    self._output({"venues": [], "count": 0, "error": msg}, "")
+                else:
+                    print(msg)
+                return
+            if city in REGION_SLUGS:
+                warning = (f"'{city}' is a multi-city region and cannot filter search "
+                           f"results; showing all matches. Use 'available --city {city}' "
+                           f"for region-wide availability.")
+
+        venues = await self.client.search_venues(query)
+
+        if city and city not in REGION_SLUGS:
+            venues = [v for v in venues
+                      if city_matches_address(city, v.get("address", ""))]
 
         if not venues:
             msg = f"No venues found for '{query}'"
@@ -534,12 +599,16 @@ class CommandHandler:
                 msg += f" in {city}"
             msg += "."
             if self.json_output:
-                self._output({"venues": [], "message": msg}, "")
+                self._output({"venues": [], "count": 0, "message": msg}, "")
             else:
                 print(msg)
             return
 
         data = {"venues": venues, "count": len(venues)}
+        if city:
+            data["city"] = city
+        if warning:
+            data["warning"] = warning
 
         if self.json_output:
             self._output(data, "")
@@ -547,6 +616,8 @@ class CommandHandler:
             print(f"Search Results for '{query}':")
             if city:
                 print(f"City: {city}")
+            if warning:
+                print(f"Note: {warning}")
             print()
 
             rows = []
@@ -871,7 +942,7 @@ class CommandHandler:
             rows = []
 
             for day_result in results:
-                row = [format_date_display(day_result["date"])[:12]]
+                row = [format_date_display(day_result["date"])]
                 for time_result in day_result["times"]:
                     if time_result.get("available"):
                         row.append("Available")
@@ -1101,6 +1172,10 @@ Examples:
   ontopo-cli.py url abc123                          # Get booking URL
         """
     )
+    parser.add_argument(
+        "--check-args", action="store_true",
+        help=argparse.SUPPRESS  # Validate arguments and exit; used by tests.
+    )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
@@ -1246,6 +1321,10 @@ def main() -> int:
     if not args.command:
         parser.print_help()
         return 1
+
+    # Validate arguments without executing (used by the docs conformance test).
+    if getattr(args, "check_args", False):
+        return 0
 
     return asyncio.run(main_async(args))
 

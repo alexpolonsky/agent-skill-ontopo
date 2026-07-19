@@ -125,7 +125,7 @@ python3 {baseDir}/scripts/ontopo-cli.py search "taizu"
 # Note the venue ID from results (e.g., 36960535)
 
 # 2. Check availability
-python3 {baseDir}/scripts/ontopo-cli.py check 36960535 tomorrow --time 19:00
+python3 {baseDir}/scripts/ontopo-cli.py check 36960535 tomorrow 19:00
 
 # 3. View menu
 python3 {baseDir}/scripts/ontopo-cli.py menu 36960535
