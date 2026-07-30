@@ -138,6 +138,81 @@ def city_matches_address(city_slug: str, address: str) -> bool:
 
 
 # =============================================================================
+# STRUCTURED OUTPUT
+# =============================================================================
+# Every command emits the same JSON envelope so an agent can parse one shape:
+#
+#   {"ok": bool, "command": str, "criteria": {...},
+#    "results": [...], "count": int, "warning": str|null, "error": str|null}
+#
+# Venue objects are flat and always carry venue_id / name / booking_url where
+# known, so a result from any command can be fed straight into any other.
+# Pass --raw for the unprocessed upstream payload.
+
+SLOT_STATUS = {"seat": "available", "standby": "waitlist"}
+
+
+def make_booking_url(page_id: Any, locale: str = "en") -> Optional[str]:
+    """Build the public booking URL for a page id."""
+    if not page_id:
+        return None
+    return f"https://ontopo.com/{locale}/il/page/{page_id}"
+
+
+def extract_slots(availability: Optional[Dict]) -> List[Dict]:
+    """Flatten areas[].options[] into slots grouped by time and status.
+
+    Returns [{time, status, areas: [...]}]. Grouping keeps the seating choice
+    (bar vs. table vs. courtyard) while avoiding one object per area per time,
+    which is where most of the upstream payload size comes from.
+    """
+    if not isinstance(availability, dict):
+        return []
+
+    grouped: Dict[Tuple[str, str], List[str]] = {}
+    for area in availability.get("areas") or []:
+        if not isinstance(area, dict):
+            continue
+        area_name = area.get("name") or area.get("id") or "Unknown"
+        for opt in area.get("options") or []:
+            if not isinstance(opt, dict):
+                continue
+            status = SLOT_STATUS.get(opt.get("method"))
+            if not status or not opt.get("time"):
+                continue
+            key = (format_time_display(opt["time"]), status)
+            if area_name not in grouped.setdefault(key, []):
+                grouped[key].append(area_name)
+
+    return [
+        {"time": time, "status": status, "areas": areas}
+        for (time, status), areas in sorted(grouped.items())
+    ]
+
+
+def make_envelope(
+    command: str,
+    criteria: Optional[Dict] = None,
+    results: Optional[List] = None,
+    error: Optional[str] = None,
+    warning: Optional[str] = None,
+    **extra: Any
+) -> Dict:
+    """Build the standard response envelope."""
+    env = {
+        "ok": error is None,
+        "command": command,
+        "criteria": {k: v for k, v in (criteria or {}).items() if v is not None},
+        "results": results if results is not None else [],
+        "count": len(results) if results is not None else 0,
+    }
+    env.update({k: v for k, v in extra.items() if v is not None})
+    env["warning"] = warning
+    env["error"] = error
+    return env
+
+
+# =============================================================================
 # UTILITY FUNCTIONS
 # =============================================================================
 
@@ -585,9 +660,11 @@ class OntopoClient:
 class CommandHandler:
     """Handle CLI commands and format output."""
 
-    def __init__(self, client: OntopoClient, json_output: bool = False):
+    def __init__(self, client: OntopoClient, json_output: bool = False,
+                 raw_output: bool = False):
         self.client = client
         self.json_output = json_output
+        self.raw_output = raw_output
 
     def _output(self, data: Any, markdown: str) -> None:
         """Output data in JSON or markdown format."""
@@ -604,6 +681,14 @@ class CommandHandler:
         ]
         aliases = {v: k for k, v in _CITY_ALIASES.items()}
         data = {"cities": [c["slug"] for c in cities_with_labels], "count": len(CITIES)}
+        if self.json_output and not self.raw_output:
+            self._output(make_envelope(
+                "cities",
+                results=[{"slug": c["slug"], "label": c["label"],
+                          "is_region": c["slug"] in REGION_SLUGS}
+                         for c in cities_with_labels],
+            ), "")
+            return
 
         if self.json_output:
             self._output(data, "")
@@ -618,6 +703,9 @@ class CommandHandler:
     async def cmd_categories(self) -> None:
         """List supported categories."""
         data = {"categories": CATEGORIES, "count": len(CATEGORIES)}
+        if self.json_output and not self.raw_output:
+            self._output(make_envelope("categories", results=list(CATEGORIES)), "")
+            return
 
         if self.json_output:
             self._output(data, "")
@@ -636,7 +724,8 @@ class CommandHandler:
                 msg = (f"Unknown city '{city}'. "
                        f"Run: ontopo-cli.py cities")
                 if self.json_output:
-                    self._output({"venues": [], "count": 0, "error": msg}, "")
+                    self._output(make_envelope(
+                        "search", criteria={"query": query}, error=msg), "")
                 else:
                     print(msg)
                 return
@@ -657,19 +746,30 @@ class CommandHandler:
                 msg += f" in {city}"
             msg += "."
             if self.json_output:
-                self._output({"venues": [], "count": 0, "message": msg}, "")
+                self._output(make_envelope(
+                    "search", criteria={"query": query, "city": city},
+                    results=[], warning=warning, message=msg), "")
             else:
                 print(msg)
             return
 
-        data = {"venues": venues, "count": len(venues)}
-        if city:
-            data["city"] = city
-        if warning:
-            data["warning"] = warning
-
         if self.json_output:
-            self._output(data, "")
+            if self.raw_output:
+                self._output({"venues": venues, "count": len(venues)}, "")
+            else:
+                results = [{
+                    "venue_id": str(v.get("slug", "")),
+                    "name": v.get("title") or v.get("name") or "Unknown",
+                    "address": v.get("address") or None,
+                } for v in venues]
+                self._output(make_envelope(
+                    "search",
+                    criteria={"query": query, "city": city},
+                    results=results,
+                    warning=warning,
+                    hint="Use 'url <venue_id>' for a booking link, "
+                         "'check <venue_id> <date> <time>' for availability.",
+                ), "")
         else:
             print(f"Search Results for '{query}':")
             if city:
@@ -733,7 +833,7 @@ class CommandHandler:
             total_venues = response.get("total")
         except Exception as e:
             if self.json_output:
-                self._output({"error": str(e), "venues": []}, "")
+                self._output(make_envelope("available", error=str(e)), "")
             else:
                 print(f"Error searching availability: {e}")
             return
@@ -749,20 +849,43 @@ class CommandHandler:
 
         bookable_count = sum(1 for r in results if _has_bookable_slots(r))
 
-        data = {
-            "date": api_date,
-            "time": api_time,
-            "party_size": party_size,
-            "city": city,
-            "venue_type": venue_type,
-            "venues": results,
-            "count": len(results),
-            "bookable_count": bookable_count,
-            "total_venues": total_venues
-        }
-
         if self.json_output:
-            self._output(data, "")
+            if self.raw_output:
+                self._output({
+                    "date": api_date, "time": api_time,
+                    "party_size": party_size, "city": city,
+                    "venue_type": venue_type, "venues": results,
+                    "count": len(results), "bookable_count": bookable_count,
+                    "total_venues": total_venues
+                }, "")
+            else:
+                norm = []
+                for r in results:
+                    post = r.get("post", r) if isinstance(r, dict) else {}
+                    page_id = post.get("page_slug")
+                    norm.append({
+                        "venue_id": str(post.get("slug", "")),
+                        "name": post.get("venue_name") or post.get("title") or "Unknown",
+                        "page_id": str(page_id) if page_id else None,
+                        "booking_url": make_booking_url(page_id, self.client.locale),
+                        "slots": extract_slots(r.get("availability")),
+                    })
+                self._output(make_envelope(
+                    "available",
+                    criteria={
+                        "date": format_date_display(api_date),
+                        "time": format_time_display(api_time),
+                        "party_size": party_size,
+                        "city": city,
+                        "venue_type": venue_type,
+                    },
+                    results=norm,
+                    bookable_count=bookable_count,
+                    total_venues=total_venues,
+                    hint="Share booking_url values verbatim. venue_id is a "
+                         "temporary search id - a URL built from it will not "
+                         "load.",
+                ), "")
         else:
             print(f"Available Venues")
             print(f"Date: {format_date_display(api_date)}")
@@ -836,7 +959,9 @@ class CommandHandler:
                 else:
                     error_msg = f"Venue not found: {venue_id}. Try: ontopo-cli.py search <name>"
             if self.json_output:
-                self._output({"error": error_msg, "available": False}, "")
+                self._output(make_envelope(
+                    "check", criteria={"venue_input": venue_id},
+                    error=error_msg), "")
             else:
                 print(f"Error: {error_msg}")
             return
@@ -849,6 +974,30 @@ class CommandHandler:
             "party_size": party_size,
             "availability": result
         }
+        if self.json_output and not self.raw_output:
+            # The availability response carries no page id; resolve it here so
+            # the caller gets a booking link without a follow-up `url` call.
+            try:
+                page_id = await self.client.resolve_page_id(resolved_id)
+            except Exception:
+                page_id = None
+            slots = extract_slots(result)
+            self._output(make_envelope(
+                "check",
+                criteria={
+                    "venue_id": resolved_id, "venue_input": venue_id,
+                    "date": format_date_display(api_date),
+                    "time": format_time_display(api_time),
+                    "party_size": party_size,
+                },
+                results=[{
+                    "venue_id": resolved_id,
+                    "booking_url": make_booking_url(page_id, self.client.locale),
+                    "available": any(sl["status"] == "available" for sl in slots),
+                    "slots": slots,
+                }],
+            ), "")
+            return
 
         if self.json_output:
             self._output(data, "")
@@ -986,7 +1135,36 @@ class CommandHandler:
             "results": results
         }
 
-        if self.json_output:
+        if self.json_output and not self.raw_output:
+            norm = []
+            for day in results:
+                norm.append({
+                    "date": format_date_display(day.get("date", "")),
+                    "times": [{
+                        "time": format_time_display(t.get("time", "")),
+                        "status": ("available" if t.get("available")
+                                   else "waitlist" if t.get("waitlist")
+                                   else "error" if t.get("error")
+                                   else "unavailable"),
+                    } for t in day.get("times", [])],
+                })
+            try:
+                page_id = await self.client.resolve_page_id(resolved_id, validate=True)
+            except Exception:
+                page_id = None
+            self._output(make_envelope(
+                "range",
+                criteria={
+                    "venue_id": resolved_id,
+                    "venue_input": venue_id,
+                    "start_date": format_date_display(start.strftime('%Y%m%d')),
+                    "end_date": format_date_display(end.strftime('%Y%m%d')),
+                    "party_size": party_size,
+                    "booking_url": make_booking_url(page_id, self.client.locale),
+                },
+                results=norm,
+            ), "")
+        elif self.json_output:
             self._output(data, "")
         else:
             print(f"Availability Range Check")
@@ -1034,7 +1212,9 @@ class CommandHandler:
             if "404" in error_msg or "not found" in error_msg.lower():
                 error_msg = f"Venue not found: {venue_id}. Try: ontopo-cli.py search <name>"
             if self.json_output:
-                self._output({"error": error_msg}, "")
+                self._output(make_envelope(
+                    "info", criteria={"venue_input": venue_id},
+                    error=error_msg), "")
             else:
                 print(f"Error: {error_msg}")
             return
@@ -1090,6 +1270,21 @@ class CommandHandler:
             filtered = [i for i in filtered if (
                 i.get("price") is not None and float(i.get("price", 999999)) <= max_price
             )]
+
+        if self.json_output and not self.raw_output:
+            self._output(make_envelope(
+                "menu",
+                criteria={"venue_id": venue_id, "section": section,
+                          "search": search, "min_price": min_price,
+                          "max_price": max_price},
+                results=[{
+                    "name": i.get("name"),
+                    "section": i.get("section"),
+                    "price": i.get("price"),
+                    "description": i.get("description") or None,
+                } for i in filtered],
+            ), "")
+            return
 
         data = {
             "venue_id": venue_id,
@@ -1153,7 +1348,25 @@ class CommandHandler:
                 print(f"Error: {error_msg}")
             return
 
-        if self.json_output:
+        if self.json_output and not self.raw_output:
+            page_id = info.get("slug")
+            self._output(make_envelope(
+                "info",
+                criteria={"venue_input": venue_id, "venue_id": resolved_id},
+                results=[{
+                    "venue_id": resolved_id,
+                    "page_id": str(page_id) if page_id else None,
+                    "name": info.get("title") or info.get("name") or "Unknown",
+                    "address": info.get("address") or None,
+                    "phone": info.get("phone") or None,
+                    "website": info.get("website") or None,
+                    "cuisine": [t for t in (info.get("tag1"), info.get("tag2")) if t],
+                    "price_level": info.get("venue_price") or None,
+                    "about": info.get("about_us") or None,
+                    "booking_url": make_booking_url(page_id, self.client.locale),
+                }],
+            ), "")
+        elif self.json_output:
             self._output(info, "")
         else:
             name = info.get("name", info.get("title", "Unknown"))
@@ -1204,13 +1417,22 @@ class CommandHandler:
             page_id = await self.client.resolve_page_id(resolved_id, validate=True)
         except ValueError as e:
             if self.json_output:
-                self._output({"error": str(e)}, "")
+                self._output(make_envelope(
+                    "url", criteria={"venue_input": venue_id},
+                    error=str(e)), "")
             else:
                 print(f"Error: {e}")
             return
         url = f"https://ontopo.com/{self.client.locale}/il/page/{page_id}"
 
-        if self.json_output:
+        if self.json_output and not self.raw_output:
+            self._output(make_envelope(
+                "url",
+                criteria={"venue_input": venue_id},
+                results=[{"venue_id": resolved_id, "page_id": page_id,
+                          "booking_url": url}],
+            ), "")
+        elif self.json_output:
             self._output({"venue_id": venue_id, "page_id": page_id, "url": url}, "")
         else:
             print(f"Booking URL: {url}")
@@ -1238,29 +1460,40 @@ Examples:
         """
     )
     parser.add_argument(
+        "--raw", action="store_true",
+        help="With --json, emit the unprocessed upstream payload"
+    )
+    parser.add_argument(
         "--check-args", action="store_true",
         help=argparse.SUPPRESS  # Validate arguments and exit; used by tests.
     )
 
+    # Accept --raw after the subcommand as well as before it. SUPPRESS keeps
+    # the top-level value when the flag is not repeated on the subcommand.
+    _common = argparse.ArgumentParser(add_help=False)
+    _common.add_argument("--raw", action="store_true",
+                         default=argparse.SUPPRESS,
+                         help="With --json, emit the unprocessed upstream payload")
+
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # cities
-    cities_parser = subparsers.add_parser("cities", help="List supported cities")
+    cities_parser = subparsers.add_parser("cities", help="List supported cities", parents=[_common])
     cities_parser.add_argument("--json", action="store_true", help="Output as JSON")
 
     # categories
-    cat_parser = subparsers.add_parser("categories", help="List supported categories")
+    cat_parser = subparsers.add_parser("categories", help="List supported categories", parents=[_common])
     cat_parser.add_argument("--json", action="store_true", help="Output as JSON")
 
     # search
-    search_parser = subparsers.add_parser("search", help="Search for venues")
+    search_parser = subparsers.add_parser("search", help="Search for venues", parents=[_common])
     search_parser.add_argument("query", help="Search query")
     search_parser.add_argument("--city", help="Filter by city")
     search_parser.add_argument("--locale", choices=["en", "he"], default="en", help="Language")
     search_parser.add_argument("--json", action="store_true", help="Output as JSON")
 
     # available
-    avail_parser = subparsers.add_parser("available", help="Search available venues")
+    avail_parser = subparsers.add_parser("available", help="Search available venues", parents=[_common])
     avail_parser.add_argument("date", help="Date (YYYY-MM-DD, today, tomorrow, +N)")
     avail_parser.add_argument("time", help="Time (HH:MM, HHMM, 7pm)")
     avail_parser.add_argument("--city", help="City to search in")
@@ -1270,7 +1503,7 @@ Examples:
     avail_parser.add_argument("--json", action="store_true", help="Output as JSON")
 
     # check
-    check_parser = subparsers.add_parser("check", help="Check venue availability")
+    check_parser = subparsers.add_parser("check", help="Check venue availability", parents=[_common])
     check_parser.add_argument("venue_id", help="Venue ID or name (e.g., 36960535 or 'taizu')")
     check_parser.add_argument("date", help="Date (YYYY-MM-DD, today, tomorrow, +N)")
     check_parser.add_argument("time", nargs="?", default="19:00", help="Time (HH:MM, HHMM, 7pm) - default: 19:00")
@@ -1278,7 +1511,7 @@ Examples:
     check_parser.add_argument("--json", action="store_true", help="Output as JSON")
 
     # range
-    range_parser = subparsers.add_parser("range", help="Check availability over date range")
+    range_parser = subparsers.add_parser("range", help="Check availability over date range", parents=[_common])
     range_parser.add_argument("venue_id", help="Venue ID")
     range_parser.add_argument("start_date", help="Start date (YYYY-MM-DD)")
     range_parser.add_argument("end_date", help="End date (YYYY-MM-DD)")
@@ -1287,7 +1520,7 @@ Examples:
     range_parser.add_argument("--json", action="store_true", help="Output as JSON")
 
     # menu
-    menu_parser = subparsers.add_parser("menu", help="Get venue menu")
+    menu_parser = subparsers.add_parser("menu", help="Get venue menu", parents=[_common])
     menu_parser.add_argument("venue_id", help="Venue ID")
     menu_parser.add_argument("--section", help="Filter by section name")
     menu_parser.add_argument("--search", help="Search menu items")
@@ -1296,13 +1529,13 @@ Examples:
     menu_parser.add_argument("--json", action="store_true", help="Output as JSON")
 
     # info
-    info_parser = subparsers.add_parser("info", help="Get venue details")
+    info_parser = subparsers.add_parser("info", help="Get venue details", parents=[_common])
     info_parser.add_argument("venue_id", help="Venue ID")
     info_parser.add_argument("--locale", choices=["en", "he"], default="en", help="Language")
     info_parser.add_argument("--json", action="store_true", help="Output as JSON")
 
     # url
-    url_parser = subparsers.add_parser("url", help="Get booking URL")
+    url_parser = subparsers.add_parser("url", help="Get booking URL", parents=[_common])
     url_parser.add_argument("venue_id", help="Venue ID")
     url_parser.add_argument("--locale", choices=["en", "he"], default="en", help="Language")
     url_parser.add_argument("--json", action="store_true", help="Output as JSON")
@@ -1314,9 +1547,11 @@ async def main_async(args: argparse.Namespace) -> int:
     """Main async entry point."""
     locale = getattr(args, "locale", "en")
     json_output = getattr(args, "json", False)
+    raw_output = getattr(args, "raw", False)
 
     async with OntopoClient(locale=locale) as client:
-        handler = CommandHandler(client, json_output=json_output)
+        handler = CommandHandler(client, json_output=json_output,
+                                 raw_output=raw_output)
 
         try:
             if args.command == "cities":
