@@ -62,13 +62,21 @@ def run_url(venue_id):
     return proc.returncode, proc.stdout
 
 
+def extract_url(payload):
+    """Booking URL from either the legacy shape or the envelope."""
+    data = json.loads(payload)
+    if data.get("url"):
+        return data["url"]
+    results = data.get("results") or []
+    return results[0].get("booking_url", "") if results else ""
+
+
 print("url resolution (live API)")
 # Venue slug and page id must keep working (documented flows).
 for label, vid, expect_page in [("venue slug", "23971178", "36960535"),
                                 ("page id", "36960535", "36960535")]:
     code, out = run_url(vid)
-    data = json.loads(out)
-    check(f"{label} resolves", code == 0 and data.get("url", "").endswith(expect_page),
+    check(f"{label} resolves", code == 0 and extract_url(out).endswith(expect_page),
           f"(got {out[:80]})")
 
 # A fresh search-post id from `available` must NOT be echoed into the URL.
@@ -84,7 +92,7 @@ post_slug = str(post.get("slug", post.get("venue_id", "")))
 page_slug = str(post.get("page_slug", post.get("page_id", "")))
 code, out = run_url(post_slug)
 if code == 0:
-    resolved = json.loads(out).get("url", "").rsplit("/", 1)[-1]
+    resolved = extract_url(out).rsplit("/", 1)[-1]
     check("post slug not echoed into URL", resolved != post_slug,
           f"(echoed {post_slug})")
     check("post slug recovered to its page", resolved == page_slug,

@@ -29,16 +29,19 @@ echo ""
 # Static commands
 test_cmd "cities" "cities" "tel-aviv"
 test_cmd "categories" "categories" "restaurants"
-test_cmd "cities --json" "cities --json" '"cities"'
-test_cmd "categories --json" "categories --json" '"categories"'
+test_cmd "cities --json" "cities --json" '"command": "cities"'
+test_cmd "categories --json" "categories --json" '"command": "categories"'
 
 # Search
 test_cmd "search taizu" "search taizu" "Taizu"
-test_cmd "search --json" "search taizu --json" '"venues"'
+test_cmd "search --json" "search taizu --json" '"command": "search"'
+test_cmd "search --json venue_id" "search taizu --json" '"venue_id"'
+test_cmd "search --json --raw" "search taizu --json --raw" '"venues"'
 
 # Venue info
 test_cmd "info" "info 36960535" "Taizu"
-test_cmd "info --json" "info 36960535 --json" '"document_type"'
+test_cmd "info --json" "info 36960535 --json" '"booking_url"'
+test_cmd "info --json --raw" "info 36960535 --json --raw" '"document_type"'
 
 # URL
 test_cmd "url" "url 36960535" "https://ontopo.com"
