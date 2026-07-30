@@ -33,24 +33,23 @@ test_cmd "cities --json" "cities --json" '"cities"'
 test_cmd "categories --json" "categories --json" '"categories"'
 
 # Search
-test_cmd "search opa" "search opa" "OPA"
 test_cmd "search taizu" "search taizu" "Taizu"
-test_cmd "search --json" "search opa --json" '"venues"'
+test_cmd "search --json" "search taizu --json" '"venues"'
 
 # Venue info
-test_cmd "info" "info 66915792" "OPA"
-test_cmd "info --json" "info 66915792 --json" '"document_type"'
+test_cmd "info" "info 36960535" "Taizu"
+test_cmd "info --json" "info 36960535 --json" '"document_type"'
 
 # URL
-test_cmd "url" "url 66915792" "https://ontopo.com"
+test_cmd "url" "url 36960535" "https://ontopo.com"
 
 # Menu
-test_cmd "menu" "menu 66915792" "Menu:"
+test_cmd "menu" "menu 36960535" "Menu:"
 
 # Availability (may vary based on actual availability)
-test_cmd "check" "check 66915792 tomorrow" "Availability Check"
+test_cmd "check" "check 36960535 tomorrow" "Availability Check"
 test_cmd "available" "available tomorrow 19:00" "Available Venues"
-test_cmd "range" "range 66915792 tomorrow +1" "Availability Range"
+test_cmd "range" "range 36960535 tomorrow +1" "Availability Range"
 
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
