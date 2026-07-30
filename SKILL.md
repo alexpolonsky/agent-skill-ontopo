@@ -110,7 +110,7 @@ python3 {baseDir}/scripts/ontopo-cli.py url 66915792 --locale he
 
 ## Date/Time Formats
 
-**Dates**: `YYYY-MM-DD`, `today`, `tomorrow`, `+N` (days from now)
+**Dates**: `YYYY-MM-DD`, `today`, `tomorrow`, `+N`, or a weekday name like `friday`
 **Times**: `HH:MM`, `HHMM`, `7pm`, `19:30`
 
 ## Supported Cities
