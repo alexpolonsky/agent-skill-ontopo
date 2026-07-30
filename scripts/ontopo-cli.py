@@ -180,10 +180,22 @@ def parse_time(time_str: str) -> str:
     return f"{hour:02d}{minute:02d}"
 
 
+# Weekday names accepted by parse_date. "friday" means the next Friday,
+# counting today as a candidate: asking for Friday on a Friday means tonight.
+# Taking the name directly avoids the +N arithmetic that callers (human or
+# agent) routinely get wrong by a day.
+_WEEKDAYS = {name: i for i, names in enumerate([
+    ("monday", "mon"), ("tuesday", "tue", "tues"), ("wednesday", "wed"),
+    ("thursday", "thu", "thur", "thurs"), ("friday", "fri"),
+    ("saturday", "sat"), ("sunday", "sun"),
+]) for name in names}
+
+
 def parse_date(date_str: str) -> str:
     """
     Parse date input (YYYY-MM-DD) and return YYYYMMDD format.
-    Also accepts: today, tomorrow, or relative days like +3
+    Also accepts: today, tomorrow, relative days like +3, or a weekday name
+    like friday (the next occurrence, today included).
     """
     date_str = date_str.strip().lower()
 
@@ -191,6 +203,9 @@ def parse_date(date_str: str) -> str:
         dt = datetime.now()
     elif date_str == 'tomorrow':
         dt = datetime.now() + timedelta(days=1)
+    elif date_str in _WEEKDAYS:
+        now = datetime.now()
+        dt = now + timedelta(days=(_WEEKDAYS[date_str] - now.weekday()) % 7)
     elif date_str.startswith('+'):
         days = int(date_str[1:])
         dt = datetime.now() + timedelta(days=days)
@@ -198,7 +213,8 @@ def parse_date(date_str: str) -> str:
         try:
             dt = datetime.strptime(date_str, '%Y-%m-%d')
         except ValueError:
-            raise ValueError(f"Invalid date format: {date_str}. Use YYYY-MM-DD, today, tomorrow, or +N")
+            raise ValueError(f"Invalid date format: {date_str}. Use YYYY-MM-DD, "
+                             f"today, tomorrow, +N, or a weekday name like friday")
 
     return dt.strftime('%Y%m%d')
 
@@ -392,8 +408,17 @@ class OntopoClient:
         }
         return await self._request("GET", "/slug_content", params=params, auth_required=False)
 
-    async def resolve_page_id(self, venue_id: str) -> str:
-        """Resolve venue_id to page_id for booking operations."""
+    async def resolve_page_id(self, venue_id: str, validate: bool = False) -> str:
+        """Resolve venue_id to page_id for booking operations.
+
+        With validate=True, an input that cannot be resolved through the venue
+        profile is only accepted if it is itself a live page (one get_page
+        call); otherwise ValueError is raised. Without validation the input is
+        returned as-is - safe wherever a downstream API call rejects bad ids
+        anyway (check/info), but never safe for building shareable URLs:
+        ids taken from `available` output are ephemeral search-post ids, and
+        pasting them into a page URL yields a dead link.
+        """
         if venue_id in self._venue_page_cache:
             return self._venue_page_cache[venue_id]
 
@@ -414,7 +439,40 @@ class OntopoClient:
         except Exception:
             pass
 
-        # Fallback: try using venue_id directly as page_id
+        # Fallback: the input may already be a page id (the documented
+        # `url <page_id>` flow relies on this).
+        if validate:
+            # A live booking page identifies itself: content_type
+            # "reservation" plus a slug_venue back-reference. Search-post ids
+            # from `available` output also answer get_page, but as a bare
+            # content_type "page" with no slug_venue - and a URL built from
+            # one renders nothing. Recover those through the venue name.
+            bad = ValueError(
+                f"'{venue_id}' does not resolve to a booking page. "
+                f"Ids from `available` output are temporary search ids - "
+                f"use that output's page_slug instead, or find the venue "
+                f"with: ontopo-cli.py search <name>"
+            )
+            try:
+                page = await self.get_page(venue_id)
+            except Exception:
+                raise bad
+            if page.get("content_type") == "reservation" and page.get("slug_venue"):
+                self._venue_page_cache[venue_id] = venue_id
+                return venue_id
+            title = page.get("title")
+            if title:
+                try:
+                    venue_slug = await self.resolve_venue_name(title)
+                    if venue_slug != venue_id:
+                        recovered = await self.resolve_page_id(venue_slug)
+                        if recovered != venue_slug:
+                            self._venue_page_cache[venue_id] = recovered
+                            return recovered
+                except Exception:
+                    pass
+            raise bad
+
         self._venue_page_cache[venue_id] = venue_id
         return venue_id
 
@@ -1142,7 +1200,14 @@ class CommandHandler:
         """Get booking URL for venue."""
         # Resolve venue name to ID if needed
         resolved_id = await self.client.resolve_venue_name(venue_id)
-        page_id = await self.client.resolve_page_id(resolved_id)
+        try:
+            page_id = await self.client.resolve_page_id(resolved_id, validate=True)
+        except ValueError as e:
+            if self.json_output:
+                self._output({"error": str(e)}, "")
+            else:
+                print(f"Error: {e}")
+            return
         url = f"https://ontopo.com/{self.client.locale}/il/page/{page_id}"
 
         if self.json_output:
