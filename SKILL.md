@@ -1,6 +1,6 @@
 ---
 name: ontopo
-version: 1.2.0
+version: 1.3.0
 description: Find restaurants and check table availability in Israel. Search across multiple dates and venues at once, view menus, and get a booking link to finish on Ontopo. Covers dining and restaurant discovery in Tel Aviv, Jerusalem, Haifa, Eilat and 23 more cities. Use for "restaurant reservation", "table booking", "book a restaurant", "dinner reservation", "where to eat in Israel", "מסעדה", "הזמנה", "הזמנת שולחן", "תפריט", "ארוחת ערב", "איפה לאכול", "אונטופו".
 author: Alex Polonsky (https://github.com/alexpolonsky)
 homepage: https://github.com/alexpolonsky/agent-skill-ontopo
