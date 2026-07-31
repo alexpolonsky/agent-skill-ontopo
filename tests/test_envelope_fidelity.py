@@ -125,6 +125,17 @@ try:
 except Exception as exc:
     check("booking_url serves a titled page", False, f"({sample}: {exc})")
 
+print("info on a search-post id must not emit a dead booking_url")
+post_id = env_avail_first_venue = None
+env2 = run(["available", "tomorrow", "19:00", "--city", "tel-aviv"])
+if env2["results"]:
+    v0 = env2["results"][0]
+    r = run(["info", v0["venue_id"]])
+    got = r["results"][0].get("booking_url")
+    check("info booking_url is None or the venue's real page",
+          got is None or got == v0.get("booking_url"),
+          f"(info gave {got}, real page {v0.get('booking_url')})")
+
 print("error shape")
 # Note: a garbage venue NAME does not error - resolve_venue_name fuzzy-matches
 # it to search results[0] (pre-existing looseness, visible in the envelope as

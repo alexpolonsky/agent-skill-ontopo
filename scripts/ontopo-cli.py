@@ -1349,7 +1349,14 @@ class CommandHandler:
             return
 
         if self.json_output and not self.raw_output:
+            # Only a live booking page (content_type "reservation" with a
+            # slug_venue back-reference) may contribute a booking_url. For a
+            # search-post id, get_page echoes the input slug, and a URL built
+            # from it renders nothing - same trap the url command guards.
             page_id = info.get("slug")
+            if not (info.get("content_type") == "reservation"
+                    and info.get("slug_venue")):
+                page_id = None
             self._output(make_envelope(
                 "info",
                 criteria={"venue_input": venue_id, "venue_id": resolved_id},
