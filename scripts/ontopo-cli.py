@@ -643,7 +643,15 @@ class OntopoClient:
                 "size": str(size),  # Must be string!
                 "date": date,       # YYYYMMDD format
                 "time": time,       # HHMM format
-            }
+            },
+            # Since Nov 2026 the API answers HTTP 400 without data.analytics
+            # (the website sends it with every availability search).
+            "data": {"analytics": {
+                "venue_id": str(venue_id),
+                "platform": "web",
+                "distributor_id": "il",
+                "origin": "venue_page",
+            }},
         }
         return await self._request("POST", "/availability_search", body=body)
 
